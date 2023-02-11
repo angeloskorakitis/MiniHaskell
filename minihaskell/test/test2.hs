@@ -1,3 +1,3 @@
-result  = f(f(4)) + f(5);
+result  = f(f(f(4))) + f(5);
 f(x)    = g(x+1); 
 g(y)    = y;
