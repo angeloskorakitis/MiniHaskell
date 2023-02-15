@@ -4,48 +4,76 @@
 -- module Transform (transform) where
 
 import Types
+import Data.List (groupBy)
+import System.Info (arch)
+
 
 -- TODO: Implement this function
 
 
 
 -- transform :: (FExpr, [FDefinition]) -> (String, IExpr, [FExpr])
-transform :: FProgram -> IProgram
-transform (expr, defs) = iexpr : idefs ++ actuals
-    where   
-        fcalls = countFCalls (expr, defs)
-        iexpr = ("result", frst (transformExpr (expr,fcalls,[])))
-        idefs = map (\x -> transformDef x fcalls) defs
-        vars = findFArgs (head defs)
-        -- actuals = [transformActuals (thrd (transformExpr (expr,fcalls,[]))) vars fcalls]
-
--- -- for every function call of f, take the variable x of f(x) and add it to the list of actuals with the fcall expression
--- transformActuals :: [FExpr] -> [String] ->[(String,Int)] -> [IDefinition]
--- transformActuals [] _ _ = []
--- transformActuals (x:xs) (v:vs) fcalls = (v, IActuals (frst (transformExpr (x,fcalls,[])) : scnd (transformActuals xs (v:vs) fcalls))) : transformActuals xs vs fcalls
-
--- transformActualss :: [FExpr] -> [String] ->[(String,Int)] -> [IDefinition]
--- transformActualss [] _ _ = []
--- transformActualss (x:xs) (v:vs) (f:fcalls) = if (v, IActuals (frst (transformExpr (x,fcalls,[])) : scnd (transformActualss xs (v:vs) fcalls))) : transformActualss xs vs fcalls
-
-
-
--- transformActuals :: [FExpr] -> [String] ->[(String,Int)] -> IDefinition
--- transformActuals [] _ _ = ("", IActuals [])
--- transformActuals (x:xs) (v:vs) fcalls = (v, IActuals (frst (transformExpr (x,fcalls,[])) : frst (transformActuals xs vars fcalls)))
-
-
------------------------------------------------------------------------------------------
-------------------------------- Convert FExpr to IExpr ----------------------------------
+-- ( thrd (transformExpr (expr,fcalls,[])) ++ concat (scnd idefs))
+-- iexpr : (frst idefs) ++ actuals
+-- transform :: FProgram -> IProgram
+transform (expr, defs) = iexpr : (frst idefs) ++ actuals
+  where
+    fcalls = countFCalls (expr, defs)
+    transformedExpr = transformExpr (expr, fcalls, [])
+    iexpr = ("result", frst transformedExpr)
+    idefs = transformDefs defs (scnd transformedExpr)
+    iprogramTemp = iexpr : frst idefs
+    functionArgs = flattenFExprArgs (thrd transformedExpr ++ concat (scnd idefs))
+    actuals = transformActualsToIProgram (transformActs (transformActuals functionArgs defs (last (thrd idefs))))
 -----------------------------------------------------------------------------------------
 
-findFArgs :: FDefinition -> [(String)]
-findFArgs (f, args, expr) = args
+-- Flattens the arguments of the function calls.  
+-- e.g. [("f",[(FCall "f" [FCall "f" [FNum 4]]])] ->  [("f",[(FCall "f" [FCall "f" [FNum 4]]]),("f",[FCall "f" [FNum 4]])]
+flattenFExprArgs :: [(String,[FExpr])] -> [(String,[FExpr])]
+flattenFExprArgs [] = []
+flattenFExprArgs ((f,[FCall name args]):xs) = if (any isFCall args) then [(f,[FCall name args]),(f,args)] ++ (flattenFExprArgs ((f,args):xs)) else (f, args) : (flattenFExprArgs xs)
+        where
+        isFCall :: FExpr -> Bool
+        isFCall (FCall _ _) = True
+        isFCall _ = False
+flattenFExprArgs other = other
 
 
------------------------------------------------------------------------------------------
-------------------------------- Convert FExpr to IExpr ----------------------------------
------------------------------------------------------------------------------------------
+
+
+transformActualsToIProgram :: [(String, [IExpr])] -> IProgram
+transformActualsToIProgram = map groupToIDef . groupBy (\x y -> fst x == fst y)
+  where
+    groupToIDef g = (fst (head g), IActuals (concatMap snd g))
+
+
+transformActs :: [[(String,IExpr)]] -> [(String,[IExpr])]
+transformActs acts = foldl combine [] acts
+  where
+    combine acc xs = acc ++ map (\(s,e) -> (s, [e])) xs
+
+transformActuals :: [(String, [FExpr])] -> [FDefinition] -> [(String, Int)] -> [[(String,IExpr)]]
+transformActuals [] _  _ = []
+transformActuals ((s, e):xs) fdefs fcalls = findActuals (findFArgs fdefs  s) e fcalls : transformActuals xs fdefs fcalls
+        where 
+        findFArgs :: [FDefinition] -> String -> [String]
+        findFArgs [] _ = []
+        findFArgs ((s, args, _):xs) f = if f == s then args else findFArgs xs f
+
+findActuals :: [String] -> [FExpr] -> [(String, Int)] -> [(String,IExpr)]
+findActuals [] [] _ = []
+findActuals (x:xs) (y:ys) fcalls = (x, (\(iexpr,_,_) -> iexpr) transformed_expr) : findActuals xs ys ((\(_,occurs,_) -> occurs) transformed_expr)
+  where
+    transformed_expr = transformExpr (y, fcalls, [])
+-- ΕΔΩ ΝΑ ΠΡΟΣΕΞΩ!!! ΘΕΛΕΙ ΒΕΛΤΙΩΣΗ
+    
+
+
+
+
+-- -----------------------------------------------------------------------------------------
+-- ------------------------------- Convert FExpr to IExpr ----------------------------------
+-- -----------------------------------------------------------------------------------------
 
 frst :: (a, b, c) -> a
 frst (a,_,_) = a
@@ -56,21 +84,20 @@ scnd (_,b,_) = b
 thrd :: (a, b, c) -> c
 thrd (_,_,c) = c
 
-transformExpr :: (FExpr,[(String, Int)],[FExpr]) -> (IExpr, [(String, Int)],[FExpr])
+transformExpr :: (FExpr,[(String, Int)],[(String,[FExpr])]) -> (IExpr, [(String, Int)],[(String,[FExpr])])
 transformExpr (FVar s, occurs, factuals) = (IVar s, occurs, factuals)
 transformExpr (FNum n, occurs, factuals) = (INum n, occurs, factuals)
 transformExpr (FBool b, occurs, factuals) = (IBool b, occurs, factuals)
--- transformExpr (FParens b, occurs, factuals) = (IParens (fst (transformExpr (b, occurs, factuals))), occurs, factuals)
+transformExpr (FParens e, occurs, factuals) = (IParens (frst a), scnd a, thrd a)
+        where
+                a = (transformExpr (e, occurs, factuals))
+
 -- transformExpr (FIfThenElse i1 i2 i3, occurs, factuals) = (IIfThenElse (fst (transformExpr (i1, occurs, factuals))) (fst (transformExpr (i2, occurs, factuals))) (fst (transformExpr (i3, occurs, factuals))), occurs, factuals)
-transformExpr (FCall f p, occurs, factuals) = (ICall (occurence f occurs) f, delete_occurence f occurs, nfactuals)
+transformExpr (FCall f p, occurs, factuals) = (ICall (occurence f occurs) f, delete_occurence f occurs, factuals ++ [(f, p)])
         where
         delete_occurence :: String -> [(String,Int)] -> [(String,Int)]
         delete_occurence _ [] = []
         delete_occurence f ((s,n):xs) = if f == s then xs else (s,n) : delete_occurence f xs
-        add_nactuals :: [FExpr] -> [FExpr] -> [FExpr]
-        add_nactuals [] ys = ys
-        add_nactuals (x:xs) ys = add_nactuals xs (ys ++ [x])
-        nfactuals = add_nactuals p factuals
 -- transformExpr (FCompOp op i1 i2, occurs, factuals) = (ICompOp op (fst (transformExpr (i1, occurs, factuals))) (fst (transformExpr (i2, occurs, factuals))), occurs, factuals)
 transformExpr (FBinaryOp op i1 i2, occurs, factuals) = (IBinaryOp op (frst a) (frst b), scnd b, thrd b)
         where         
@@ -81,30 +108,47 @@ transformExpr (FBinaryOp op i1 i2, occurs, factuals) = (IBinaryOp op (frst a) (f
 -----------------------------------------------------------------------------------------
 ------------------------------- Convert FDefinition to IDefinition -----------------------
 -----------------------------------------------------------------------------------------
--- transformExpr (FVar s, occurs) = (IVar s, occurs)
--- transformExpr (FNum n, occurs) = (INum n, occurs)
--- transformExpr (FBool b, occurs) = (IBool b, occurs)
--- transformExpr (FParens b, occurs) = (IParens (fst (transformExpr (b, occurs))), occurs)
--- transformExpr (FIfThenElse i1 i2 i3, occurs) = (IIfThenElse (fst (transformExpr (i1, occurs))) (fst (transformExpr (i2, occurs))) (fst (transformExpr (i3, occurs))), occurs)
--- transformExpr (FCall f p, occurs) = (ICall (occurence f occurs) f, delete_occurence f occurs)
---         where
---         delete_occurence :: String -> [(String,Int)] -> [(String,Int)]
---         delete_occurence _ [] = []
---         delete_occurence f ((s,n):xs) = if f == s then xs else (s,n) : delete_occurence f xs
--- transformExpr (FCompOp op i1 i2, occurs) = (ICompOp op (fst (transformExpr (i1, occurs))) (fst (transformExpr (i2, occurs))), occurs)
--- transformExpr (FBinaryOp op i1 i2, occurs) = (IBinaryOp op (fst a) (fst b), snd b)
---         where a = (transformExpr (i1, occurs))
---               b = (transformExpr (i2, snd a))
--- transformExpr (FBooleanOp op i1 i2, occurs) = (IBooleanOp op (fst (transformExpr (i1, occurs))) (fst (transformExpr (i2, occurs))), occurs)
--- transformExpr (FUnaryOp op i, occurs) = (IUnaryOp op (fst (transformExpr (i, occurs))), occurs)
+
+transformDef :: FDefinition -> [(String, Int)] -> (IDefinition,[(String,[FExpr])], [(String,Int)])
+transformDef (name, params, expr) lookup = ((name, frst transformed), thrd transformed, scnd transformed)
+        where transformed = transformExpr (expr,lookup,[])
+
+transformDefs :: [FDefinition] -> [(String, Int)] -> ([IDefinition], [[(String,[FExpr])]], [[(String,Int)]])
+transformDefs [] _ = ([],[],[])
+transformDefs (x:xs) lookup = (frst transformed_def : frst transformed_defs , scnd transformed_def : scnd transformed_defs, (thrd transformed_def : thrd transformed_defs))
+        where 
+        transformed_def = transformDef x lookup
+        transformed_defs = transformDefs xs lookup
 
 
-
-transformDef :: FDefinition -> [(String, Int)] -> IDefinition
-transformDef (name, params, expr) lookup = (name, frst (transformExpr (expr,lookup,[])))
 
 -----------------------------------------------------------------------------------------
--------------------------------- Count FCalls - step 1 ----------------------------------  
+--------------------------- Convert FCalls to [FCalls] ----------------------------------
+-----------------------------------------------------------------------------------------
+
+-- flattenFCalls :: FExpr -> [FExpr]
+-- flattenFCalls (FCall f [FNum s]) = [FCall f [FNum s]]
+-- flattenFCalls (FCall f [FBool s]) = [FCall f [FBool s]]
+-- flattenFCalls (FCall f [FVar s]) = [FCall f [FVar s]]
+-- flattenFCalls (FCall f [FParens s]) = [FCall f [FParens s]]
+-- flattenFCalls (FCall f [FCall s p]) = [FCall f [FCall s p]]
+-- flattenFCalls (FCall f [FBinaryOp op s1 s2]) = [FCall f [FBinaryOp op s1 s2]]
+-- flattenFCalls (FCall f [FIfThenElse s1 s2 s3]) = [FCall f [FIfThenElse s1 s2 s3]]
+-- flattenFCalls (FCall f [FCompOp op s1 s2]) = [FCall f [FCompOp op s1 s2]]
+-- flattenFCalls (FCall f [FBooleanOp op s1 s2]) = [FCall f [FBooleanOp op s1 s2]]
+
+-- flattenFCalls (FCall f [arg]) = FCall f [] : flattenFCalls arg
+
+
+-- flattenFProgram :: FProgram -> [FExpr]
+-- flattenFProgram (expr, defs) = flattenFCalls expr ++ concatMap flattenFDef defs
+
+-- flattenFDef :: FDefinition -> [FExpr]
+-- flattenFDef (name, params, expr) = flattenFCalls expr
+
+
+-----------------------------------------------------------------------------------------
+----------------------------- Count Function Calls --------------------------------------
 -----------------------------------------------------------------------------------------
 
 countFCalls :: FProgram -> [(String,Int)]
@@ -156,10 +200,3 @@ occurence :: String -> [(String,Int)] -> Int
 occurence f [] = 0
 occurence f ((s,n):xs) = if f == s then n else occurence f xs
 
------------------------------------------------------------------------------------------
--------------------------- FProgram -> IProgram - step 2 -------------------------------- 
------------------------------------------------------------------------------------------
-
--- Take the result of countFCalls and use it to transform the program
--- into an IProgram. You can use the functions transformExpr and
--- transformDef from above.
