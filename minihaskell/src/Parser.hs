@@ -137,7 +137,7 @@ operatorTable =
             binary "/=" (FCompOp Neq) E.AssocNone
         ],
         [
-            prefixK "not" $ FUnaryOp Not
+            prefix "not" $ FUnaryOp Not
         ],
         [
             binary "||" (FBooleanOp Or ) E.AssocLeft,

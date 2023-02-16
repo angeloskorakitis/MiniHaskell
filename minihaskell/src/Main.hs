@@ -22,4 +22,5 @@ main = do
                 putStrLn "\n\n> Result is:"
                 case eval (transform fp) of
                     INum n -> print n
+                    IBool b -> print b
                     _ -> error "> Runtime Error"
