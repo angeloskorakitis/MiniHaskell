@@ -137,7 +137,7 @@ operatorTable =
             binary "/=" (FCompOp Neq) E.AssocNone
         ],
         [
-            prefix "not" $ FUnaryOp Not
+            prefixK "not" $ FUnaryOp Not
         ],
         [
             binary "||" (FBooleanOp Or ) E.AssocLeft,
@@ -146,7 +146,7 @@ operatorTable =
     ]
     where
         prefix  s f = E.Prefix (f <$ operator s)
-        prefixK k f = E.Prefix (f <$ keyword  k)
+        prefixK k f = E.Prefix (f <$ lexeme (keyword  k))
         binary  s f = E.Infix  (f <$ operator s)
         binaryK k f = E.Infix  (f <$ keyword  k)
 
