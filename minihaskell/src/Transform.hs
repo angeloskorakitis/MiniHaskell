@@ -3,18 +3,18 @@ module Transform (transform) where
 import Types
 import Data.List ( groupBy, sortBy )
 import Data.Ord (comparing)
--- import Data.Map as Map
 
 transform :: FProgram -> IProgram
-transform (expr, defs) = iexpr : frst idefs ++ iactuals
+transform (expr, defs) = iprogram
   where
-    fcalls = findFunctions defs
-    transformedExpr = transformExpr (expr, fcalls, [])
-    iexpr = ("result", (\(iexpr,_,_) -> iexpr) transformedExpr)
-    idefs = transformDefs defs (scnd transformedExpr)
-    function_args =  (\(_,_,x) -> x) transformedExpr ++ concat (scnd idefs)
-    actuals = groupActuals function_args
-    iactuals = transformActualsToIProgram actuals defs
+    fcalls = findFunctions defs                                                      -- Find all the function calls in the program.
+    transformed_expr = transformExpr (expr, fcalls, [])                              -- Transform the result expression to IExpr.
+    iexpr = ("result", (\(iexpr,_,_) -> iexpr) transformed_expr)                     -- Get the IExpr from the tuple.
+    idefs = transformDefs defs ((\(_,fcalls,_) -> fcalls) transformed_expr)          -- Transform the definitions to IDefinitions.
+    function_args =  (\(_,_,factuals) -> factuals) transformed_expr ++ concat ((\(_,_,factuals) -> factuals) idefs) -- Get the function arguments from the result expression and the definitions.
+    actuals = groupActuals function_args                                            -- Group the actuals by function name.
+    iactuals = transformActuals actuals defs                                        -- Transform the actuals to IProgram, change the function name to the parameters of the function.
+    iprogram = iexpr : (\(iexprs,_,_) -> iexprs) idefs ++ iactuals                  -- The final IProgram.
 
 
 -- Combines the IExprs of the same function call, i.e. same String
@@ -26,22 +26,33 @@ groupActuals = map combine . groupBy sameString . sortBy sortString
     combine ((s, exprs):xs) = (s, concatMap snd ((s, exprs):xs))
 
 
-transformActualsToIProgram :: [(String, [IExpr])] -> [FDefinition] -> [(String, IExpr)]
-transformActualsToIProgram [] _ = []
-transformActualsToIProgram ((s, e):xs) fdefs = findActuals (if null fargs then [s] else fargs) e ++ transformActualsToIProgram xs fdefs
+-- Transforms the actuals to IProgram, given the definitions and the function name and intermediate epressions.
+transformActuals :: [(String, [IExpr])] -> [FDefinition] -> IProgram
+transformActuals [] _ = []
+transformActuals ((f, iexprs):xs) fdefs = findActuals name iexprs' ++ transformActuals xs fdefs
         where
-                fargs = findFArgs fdefs s
+                name = if null fargs then [f] else fargs
+                fargs = findFParameters fdefs f
+                partition_num = length iexprs `div` length name
+                iexprs' = partition partition_num iexprs
 
 
-findFArgs :: [FDefinition] -> String -> [String]
-findFArgs [] _ = [] 
-findFArgs ((s, args, _):xs) f = if f == s then args else findFArgs xs f
+-- Given the definitions of the functions and the function name it returns the parameters of the function.
+findFParameters :: [FDefinition] -> String -> [String]
+findFParameters [] _ = [] 
+findFParameters ((s, params, _):xs) f = if f == s then params else findFParameters xs f
 
-findActuals :: [String] -> [IExpr] -> [(String, IExpr)]
+
+-- For each parameter of the function it creates a list of IExprs- Actuals.
+findActuals :: [String] -> [[IExpr]] -> [(String, IExpr)]
 findActuals [] _ = []
 findActuals _ [] = []
-findActuals (x1:x2:xs) (y1:y2:ys) = (x1, IActuals [y1]) : findActuals (x2:xs) (y2:ys)
-findActuals (x:xs) ys = (x,IActuals ys) : findActuals xs []
+findActuals (x:xs) (y:ys) = (x,IActuals y) : findActuals xs ys
+
+
+-----------------------------------------------------------------------------------------
+------------------------- Transform Expressions to IExpressions -------------------------
+-----------------------------------------------------------------------------------------
 
 
 transformExpr :: (FExpr,[(String, Int)],[(String,[IExpr])]) -> (IExpr, [(String, Int)],[(String,[IExpr])])
@@ -52,23 +63,25 @@ transformExpr (FParens e, fcalls, factuals) = (IParens iexpr, fcalls', factuals'
         where
                 transformed_expr = transformExpr (e, fcalls, factuals)
                 iexpr = (\(iexpr,_,_) -> iexpr) transformed_expr
-                fcalls' = (\(_,fcalls',_) -> fcalls') transformed_expr
-                factuals' = (\(_,_,factuals') -> factuals') transformed_expr
+                fcalls' = (\(_,fcalls,_) -> fcalls) transformed_expr
+                factuals' = (\(_,_,factuals) -> factuals) transformed_expr
 
-transformExpr (FIfThenElse e1 e2 e3, fcalls, factuals) = (IIfThenElse iexpr1 iexpr2 iexpr3, fcalls3, factuals3)
+-- For readability purposes we use frst, scnd, thrd instead of \(a,b,c) -> a, \(a,b,c) -> b, \(a,b,c) -> c...
+transformExpr (FIfThenElse cond_expr then_expr else_expr, fcalls, factuals) = (IIfThenElse cond_iexpr then_iepxr else_iexpr, else_fcalls, else_factuals)
         where
-                i1 = transformExpr (e1, fcalls, factuals)
-                iexpr1 = frst i1
-                fcalls1 = scnd i1
-                factuals1 = thrd i1
-                i2 = transformExpr (e2, fcalls1, factuals1)
-                iexpr2 = frst i2
-                fcalls2 = scnd i2
-                factuals2 = thrd i2
-                i3 = transformExpr (e3, fcalls2, factuals2)
-                iexpr3 = frst i3
-                fcalls3 = scnd i3
-                factuals3 = thrd i3
+                cond_transformed_expr = transformExpr (cond_expr, fcalls, factuals)
+                cond_iexpr = frst cond_transformed_expr
+                cond_fcalls = scnd cond_transformed_expr
+                cond_factuals = thrd cond_transformed_expr
+                then_transformed_expr = transformExpr (then_expr, cond_fcalls, cond_factuals)
+                then_iepxr = frst then_transformed_expr
+                then_fcalls = scnd then_transformed_expr
+                then_factuals = thrd then_transformed_expr
+                else_transformed_expr = transformExpr (else_expr, then_fcalls, then_factuals)
+                else_iexpr = frst else_transformed_expr
+                else_fcalls = scnd else_transformed_expr
+                else_factuals = thrd else_transformed_expr
+
 transformExpr (FCall f p, fcalls, factuals) = (ICall (occurence f fcalls) f, fcalls'', factuals'')
         where 
                 fcalls' = increaseOccurence f fcalls
@@ -76,28 +89,49 @@ transformExpr (FCall f p, fcalls, factuals) = (ICall (occurence f fcalls) f, fca
                 transform_expr = transformExprs p fcalls' factuals'
                 iexpr = frst transform_expr
                 fcalls'' = if null (scnd transform_expr) then [] else last (scnd transform_expr)
-                factuals'' = if null (thrd transform_expr) then [] else last (thrd transform_expr)
+                factuals'' = if null (thrd transform_expr) then factuals' else last (thrd transform_expr)
 
 -----------------------------------------------------------------------------------------
 
-transformExpr (FCompOp op e1 e2, occurs, factuals) = (ICompOp op (frst a) (frst b), scnd b, thrd b)
-        where         
-        a = transformExpr (e1, occurs, factuals)
-        b = transformExpr (e2, scnd a, thrd a)
-transformExpr (FBinaryOp op i1 i2, occurs, factuals) = (IBinaryOp op (frst a) (frst b), scnd b, thrd b)
-        where         
-        a = transformExpr (i1, occurs, factuals)
-        b = transformExpr (i2, scnd a, thrd a)
-transformExpr (FBooleanOp op i1 i2, occurs, factuals) = (IBooleanOp op (frst a) (frst b), scnd b, thrd b)
-        where         
-        a = transformExpr (i1, occurs, factuals)
-        b = transformExpr (i2, scnd a, thrd a)
+transformExpr (FCompOp op left_expr right_expr, occurs, factuals) = (ICompOp op left_iexpr right_iexpr, right_iexpr_fcalls,  right_iexpr_factuals)
+        where
+                left_transformed_expr = transformExpr (left_expr, occurs, factuals)
+                left_iexpr = frst left_transformed_expr
+                left_iexpr_fcalls = scnd left_transformed_expr
+                left_iexpr_factuals = thrd left_transformed_expr
+                right_transformed_expr = transformExpr (right_expr, left_iexpr_fcalls, left_iexpr_factuals)
+                right_iexpr = frst right_transformed_expr
+                right_iexpr_fcalls = scnd right_transformed_expr
+                right_iexpr_factuals = thrd right_transformed_expr
+transformExpr (FBinaryOp op left_expr right_expr, occurs, factuals) = (IBinaryOp op left_iexpr right_iexpr, right_iexpr_fcalls,  right_iexpr_factuals)
+        where
+                left_transformed_expr = transformExpr (left_expr, occurs, factuals)
+                left_iexpr = frst left_transformed_expr
+                left_iexpr_fcalls = scnd left_transformed_expr
+                left_iexpr_factuals = thrd left_transformed_expr
+                right_transformed_expr = transformExpr (right_expr, left_iexpr_fcalls, left_iexpr_factuals)
+                right_iexpr = frst right_transformed_expr
+                right_iexpr_fcalls = scnd right_transformed_expr
+                right_iexpr_factuals = thrd right_transformed_expr
+
+transformExpr (FBooleanOp op left_expr right_expr, occurs, factuals) = (IBooleanOp op left_iexpr right_iexpr, right_iexpr_fcalls,  right_iexpr_factuals)
+        where
+                left_transformed_expr = transformExpr (left_expr, occurs, factuals)
+                left_iexpr = frst left_transformed_expr
+                left_iexpr_fcalls = scnd left_transformed_expr
+                left_iexpr_factuals = thrd left_transformed_expr
+                right_transformed_expr = transformExpr (right_expr, left_iexpr_fcalls, left_iexpr_factuals)
+                right_iexpr = frst right_transformed_expr
+                right_iexpr_fcalls = scnd right_transformed_expr
+                right_iexpr_factuals = thrd right_transformed_expr
+
 transformExpr (FUnaryOp op e, fcalls, factuals) = (IUnaryOp op iexpr, fcalls', factuals')
         where
                 transformed_expr = transformExpr (e, fcalls, factuals)
                 iexpr = (\(iexpr,_,_) -> iexpr) transformed_expr
-                fcalls' = (\(_,fcalls',_) -> fcalls') transformed_expr
-                factuals' = (\(_,_,factuals') -> factuals') transformed_expr
+                fcalls' = (\(_,fcalls,_) -> fcalls) transformed_expr
+                factuals' = (\(_,_,factuals) -> factuals) transformed_expr
+
 
 
 transformExprs :: [FExpr] -> [(String, Int)] -> [(String,[IExpr])] -> ([IExpr], [[(String, Int)]], [[(String,[IExpr])]])
@@ -108,20 +142,21 @@ transformExprs (x:xs) occurs factuals = (frst transformed_expr : frst transforme
                 transformed_exprs = transformExprs xs (scnd transformed_expr) (thrd transformed_expr)
 
 
+----------------------------------------------------------------------------------------------
+------------------------------- Convert FDefinition to IDefinition ---------------------------
+----------------------------------------------------------------------------------------------
 
------------------------------------------------------------------------------------------
-------------------------------- Convert FDefinition to IDefinition ----------------------
------------------------------------------------------------------------------------------
 
-transformDef :: FDefinition -> [(String, Int)] -> (IDefinition,[(String,[IExpr])], [(String,Int)])
-transformDef (name, _, expr) lookup = ((name, iexprs), thrd transformed_expr, fcalls)
+transformDef :: FDefinition -> [(String, Int)] -> (IDefinition, [(String,Int)], [(String,[IExpr])])
+transformDef (name, _, expr) lookup = ((name, iexpr), fcalls, factuals)
         where 
         transformed_expr = transformExpr (expr,lookup,[])
-        iexprs = frst transformed_expr
-        fcalls = scnd transformed_expr
+        iexpr = (\(iexpr,_,_) -> iexpr) transformed_expr
+        fcalls = (\(_,fcalls',_) -> fcalls') transformed_expr
+        factuals = (\(_,_,factuals') -> factuals') transformed_expr
 
 
-transformDefs :: [FDefinition] -> [(String, Int)] -> ([IDefinition], [[(String,[IExpr])]], [[(String,Int)]])
+transformDefs :: [FDefinition] -> [(String, Int)] -> ([IDefinition], [[(String,Int)]], [[(String,[IExpr])]])
 transformDefs [] _ = ([],[],[])
 transformDefs (x:xs) lookup = (frst transformed_def : frst transformed_defs , scnd transformed_def : scnd transformed_defs, thrd transformed_def : thrd transformed_defs)
         where 
@@ -129,9 +164,16 @@ transformDefs (x:xs) lookup = (frst transformed_def : frst transformed_defs , sc
         transformed_defs = transformDefs xs lookup
 
 
------------------------------------------------------------------------------------------
--------------------------------- Helper functions ---------------------------------------
------------------------------------------------------------------------------------------
+----------------------------------------------------------------------------------------------
+------------------------------------ Helper functions ----------------------------------------
+----------------------------------------------------------------------------------------------
+
+-- Partitions a given list into n equal parts. We need this to partition the actuals of the function calls.
+partition :: Int -> [a] -> [[a]]
+partition n xs = partition' n xs []
+  where
+    partition' _ [] acc = reverse acc
+    partition' n xs acc = partition' n (drop n xs) (take n xs : acc)
 
 
 -- Returns the number of occurences of a function.

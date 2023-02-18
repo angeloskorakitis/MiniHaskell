@@ -12,10 +12,10 @@ eval iprogram = result
 
 -- Evaluate an Intensional expression given a function name and arguments
 evalIDef :: IEnv -> String -> [IDefinition] -> IExpr
-evalIDef env funcName defs =
-  case lookup funcName defs of
-    Just funcDef -> fst (evalExpr env funcDef defs)
-    Nothing -> error ("Function '" ++ funcName ++ "' is undefined")
+evalIDef env function defs =
+  case lookup function defs of
+    Just function_def -> fst (evalExpr env function_def defs)
+    Nothing -> error ("Function " ++ function ++ " is not defined.")
 
 
 -- Evaluate an Intensional expression given a function name and arguments
@@ -30,8 +30,8 @@ evalExpr env expr defs = case expr of
     INum num -> (INum num, env)
     IBool bool -> (IBool bool, env)
     IParens expr -> evalExpr env expr defs
-    IIfThenElse cond thenExpr elseExpr -> evalIfThenElse env defs cond thenExpr elseExpr
-    ICall i funcName -> evalCall env i funcName defs
+    IIfThenElse cond then_expr else_expr -> evalIfThenElse env defs cond then_expr else_expr
+    ICall i function -> evalCall env i function defs
     IActuals args -> evalActuals env defs args
     IBinaryOp  op expr1 expr2 -> evalBinaryOp env defs op expr1 expr2
     ICompOp op expr1 expr2 -> evalCompareOp env defs op expr1 expr2
@@ -43,21 +43,23 @@ evalExpr env expr defs = case expr of
 -- Essentially, this function looks up the variable in the definitions and evaluates the expression.
 evalVar :: IEnv -> String -> [IDefinition] -> (IExpr,IEnv)
 evalVar env var defs = case lookup var defs of
-    Just funcDef -> evalExpr env funcDef defs
+    Just function_def -> evalExpr env function_def defs
+    Nothing -> error ("Variable " ++ var ++ " is not defined.")
 
 
 -- Evaluates IfThenElse expression given an environment, definitions, condition, 'then' expression, and 'else' expression.
 evalIfThenElse :: IEnv -> [IDefinition] ->  IExpr -> IExpr -> IExpr -> (IExpr,IEnv)
-evalIfThenElse env defs cond thenExpr elseExpr =
+evalIfThenElse env defs cond then_expr else_expr =
     case fst (evalExpr env cond defs) of
-        IBool True -> evalExpr env thenExpr defs
-        IBool False -> evalExpr env elseExpr defs
+        IBool True -> evalExpr env then_expr defs
+        IBool False -> evalExpr env else_expr defs
 
 -- Evaluates a function call given an environment, function call index, function name, and definitions.
 -- Essentially, this function looks up the function in the definitions, adds the index at the head of the env and evaluates the expression.
 evalCall :: IEnv -> Int -> String -> [IDefinition] -> (IExpr,IEnv)
 evalCall env index function defs  = case lookup function defs of
-    Just funcDef -> evalExpr (index:env) funcDef defs
+    Just function_def -> evalExpr (index:env) function_def defs
+    Nothing -> error ("Function " ++ function ++ " is not defined.")
 
 
 -- Evaluate the compare operator given an environment, definitions, operator, and two expressions.
@@ -68,6 +70,10 @@ evalCompareOp env defs op (INum n1) (INum n2) =
         Lt -> (IBool (n1 < n2), env)
         GtEq -> (IBool (n1 >= n2), env)
         Gt -> (IBool (n1 > n2), env)
+        Eq -> (IBool (n1 == n2), env)
+        Neq -> (IBool (n1 /= n2), env)
+evalCompareOp env defs op (IBool n1) (IBool n2) =
+    case op of
         Eq -> (IBool (n1 == n2), env)
         Neq -> (IBool (n1 /= n2), env)
 evalCompareOp env defs op n1 n2 = evalCompareOp env defs op eval_expr1 eval_expr2
