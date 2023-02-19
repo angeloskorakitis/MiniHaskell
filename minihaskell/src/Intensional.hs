@@ -62,7 +62,7 @@ evalCall env index function defs  = case lookup function defs of
     Nothing -> error ("Function " ++ function ++ " is not defined.")
 
 
--- Evaluate the compare operator given an environment, definitions, operator, and two expressions.
+-- Evaluates the compare operator given an environment, definitions, operator, and two expressions.
 evalCompareOp :: IEnv -> [IDefinition] -> OpCompare -> IExpr -> IExpr -> (IExpr, IEnv)
 evalCompareOp env defs op (INum n1) (INum n2) =
     case op of
@@ -82,7 +82,7 @@ evalCompareOp env defs op n1 n2 = evalCompareOp env defs op eval_expr1 eval_expr
     eval_expr2 = fst (evalExpr env n2 defs)
 
 
--- Evaluate the binary operator given an environment, definitions, operator, and expression.
+-- Evaluates the binary operator given an environment, definitions, operator, and expression.
 evalBinaryOp :: IEnv -> [IDefinition] -> OpBinary -> IExpr -> IExpr -> (IExpr, IEnv)
 evalBinaryOp env defs op (INum n1) (INum n2) =
     case op of
@@ -96,7 +96,7 @@ evalBinaryOp env defs op n1 n2 = evalBinaryOp env defs op eval_expr1 eval_expr2
     eval_expr2 = fst (evalExpr env n2 defs)
 
 
--- Evaluate the boolean operator given an environment, definitions, operator, and expression.
+-- Evaluates the boolean operator given an environment, definitions, operator, and expression.
 evalBooleanOp :: IEnv -> [IDefinition] -> OpBool -> IExpr -> IExpr -> (IExpr, IEnv)
 evalBooleanOp env defs op (IBool n1) (IBool n2) =
     case op of
@@ -108,7 +108,7 @@ evalBooleanOp env defs op n1 n2 = evalBooleanOp env defs op eval_expr1 eval_expr
     eval_expr2 = fst (evalExpr env n2 defs)
 
 
--- Evaluate the unary operator given an environment, definitions, operator, and expression.
+-- Evaluates the unary operator given an environment, definitions, operator, and expression.
 evalUnaryOp :: IEnv -> [IDefinition] -> OpUnary -> IExpr -> (IExpr, IEnv)
 evalUnaryOp env defs op (INum n) =
     case op of

@@ -81,3 +81,6 @@ data Token =
 
 Ο Parser χρησιμοποιεί διάφορες συναρτήσεις για τον υπολογισμό του AST. Οι βασικές συναρτήσεις είναι ή parseResult που κάνει parse την result έκφραση αλλά και η parseDefinitions, που αντίστοιχα κάνει parse τους ορισμούς των συναρτήσεων. Αυτές με την σειρά τους καλούν άλλες συναρτήσεις για τον υπολογισμό των AST. Η parseExpression υπολογίζει εκφράσεις, καλεί την parseFactor και την parseTerm. Στην parseFactor γίνονται parsing τελεστές όπως αριθμοί, μεταβλητές, κλήσεις συναρτήσεων κλπ, ενώ στην parseTerm αναλύονται τελεστές-όροι, +,-,/,...,AND,OR,...
 Ουσιαστικά οι συναρτήσεις παίρνουν μια λίστα από Token και επιστρέφουν το τμήμα που αναλύσανε, FExpr, και το την υπόλοιπη λίστα που δεν έχουν αναλύσει.
+
+
+-- PROSOXH! den kanei swsto partition tis metablhtes gia polles parametrous stis synartiseis...

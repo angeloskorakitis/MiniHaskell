@@ -4,37 +4,35 @@ import Types
 import Data.List ( groupBy, sortBy )
 import Data.Ord (comparing)
 
+
 transform :: FProgram -> IProgram
-transform (expr, defs) = iprogram
+transform (expr, defs) =  iprogram
   where
     fcalls = findFunctions defs                                                      -- Find all the function calls in the program.
     transformed_expr = transformExpr (expr, fcalls, [])                              -- Transform the result expression to IExpr.
     iexpr = ("result", (\(iexpr,_,_) -> iexpr) transformed_expr)                     -- Get the IExpr from the tuple.
     idefs = transformDefs defs ((\(_,fcalls,_) -> fcalls) transformed_expr)          -- Transform the definitions to IDefinitions.
     function_args =  (\(_,_,factuals) -> factuals) transformed_expr ++ concat ((\(_,_,factuals) -> factuals) idefs) -- Get the function arguments from the result expression and the definitions.
-    actuals = groupActuals function_args                                            -- Group the actuals by function name.
-    iactuals = transformActuals actuals defs                                        -- Transform the actuals to IProgram, change the function name to the parameters of the function.
-    iprogram = iexpr : (\(iexprs,_,_) -> iexprs) idefs ++ iactuals                  -- The final IProgram.
+    iactuals =groupActuals (transformActuals function_args defs)                     -- Transform the actuals to IProgram, change the function name to the parameters of the function.
+    iprogram = iexpr : (\(iexprs,_,_) -> iexprs) idefs ++ iactuals                   -- The final IProgram.
 
 
--- Combines the IExprs of the same function call, i.e. same String
-groupActuals :: [(String, [IExpr])] -> [(String, [IExpr])]
-groupActuals = map combine . groupBy sameString . sortBy sortString
+-- Combines the IExprs of the same function parameter, i.e. same String
+groupActuals :: [(String, [IExpr])] -> [(String, IExpr)]
+groupActuals [] = []
+groupActuals ((s, iexprs):xs) = (s,IActuals (iexprs ++ concatMap snd matchingTuples)) : groupActuals nonMatchingTuples
   where
-    sortString (s1, _) (s2, _) = compare s1 s2
-    sameString (s1, _) (s2, _) = s1 == s2
-    combine ((s, exprs):xs) = (s, concatMap snd ((s, exprs):xs))
+    matchingTuples = filter (\(s', _) -> s == s') xs
+    nonMatchingTuples = filter (\(s', _) -> s /= s') xs
 
 
--- Transforms the actuals to IProgram, given the definitions and the function name and intermediate epressions.
-transformActuals :: [(String, [IExpr])] -> [FDefinition] -> IProgram
+-- Transforms the actuals to IProgram, given the definitions and the function name and intermediate expressions.
+transformActuals :: [(String, [IExpr])] -> [FDefinition] -> [(String,[IExpr])]
 transformActuals [] _ = []
-transformActuals ((f, iexprs):xs) fdefs = findActuals name iexprs' ++ transformActuals xs fdefs
+transformActuals ((f, iexprs):xs) fdefs = findActuals name iexprs ++ transformActuals xs fdefs
         where
-                name = if null fargs then [f] else fargs
                 fargs = findFParameters fdefs f
-                partition_num = length iexprs `div` length name
-                iexprs' = partition partition_num iexprs
+                name = if null fargs then [f] else fargs
 
 
 -- Given the definitions of the functions and the function name it returns the parameters of the function.
@@ -44,10 +42,10 @@ findFParameters ((s, params, _):xs) f = if f == s then params else findFParamete
 
 
 -- For each parameter of the function it creates a list of IExprs- Actuals.
-findActuals :: [String] -> [[IExpr]] -> [(String, IExpr)]
+findActuals :: [String] -> [IExpr] -> [(String, [IExpr])]
 findActuals [] _ = []
-findActuals _ [] = []
-findActuals (x:xs) (y:ys) = (x,IActuals y) : findActuals xs ys
+findActuals (x:xs) [] = [(concat (x:xs), [])]
+findActuals (x:xs) (y:ys) = (x, [y]) : findActuals xs ys
 
 
 -----------------------------------------------------------------------------------------
@@ -88,7 +86,7 @@ transformExpr (FCall f p, fcalls, factuals) = (ICall (occurence f fcalls) f, fca
                 factuals' = factuals ++ [(f,iexpr)]
                 transform_expr = transformExprs p fcalls' factuals'
                 iexpr = frst transform_expr
-                fcalls'' = if null (scnd transform_expr) then [] else last (scnd transform_expr)
+                fcalls'' = if null (scnd transform_expr) then fcalls' else last (scnd transform_expr)
                 factuals'' = if null (thrd transform_expr) then factuals' else last (thrd transform_expr)
 
 -----------------------------------------------------------------------------------------
@@ -167,13 +165,6 @@ transformDefs (x:xs) lookup = (frst transformed_def : frst transformed_defs , sc
 ----------------------------------------------------------------------------------------------
 ------------------------------------ Helper functions ----------------------------------------
 ----------------------------------------------------------------------------------------------
-
--- Partitions a given list into n equal parts. We need this to partition the actuals of the function calls.
-partition :: Int -> [a] -> [[a]]
-partition n xs = partition' n xs []
-  where
-    partition' _ [] acc = reverse acc
-    partition' n xs acc = partition' n (drop n xs) (take n xs : acc)
 
 
 -- Returns the number of occurences of a function.
