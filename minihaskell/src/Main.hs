@@ -3,8 +3,8 @@
 module Main where
 
 import Intensional (eval)
--- import Parser (programParser)
-import Parser_Bonus (programParser)
+import Parser (programParser)
+-- import Parser_Bonus (programParser)             -- Bonus
 import Text.Pretty.Simple (pPrint)
 import Transform (transform)
 import Types ( IExpr(INum), IExpr(IBool) )
