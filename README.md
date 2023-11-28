@@ -5,21 +5,21 @@
 Στην εργασία έχουν υλοποιηθεί όλα τα μέρη όπως επίσης και το Bonus.
 
 - Κατάλογος
-.
-├── README.md
-└── minihaskell
-    ├── pdfs
-    ├── project22-23.pdf
-    ├── src
-    │   ├── Intensional.hs
-    │   ├── Main.hs
-    │   ├── Makefile
-    │   ├── Parser.hs
-    │   ├── Parser_Bonus.hs
-    │   ├── Transform.hs
-    │   └── Types.hs
-    └── test
-        └── .txt
+    .
+    ├── README.md
+    └── minihaskell
+        ├── pdfs
+        ├── project22-23.pdf
+        ├── src
+        │   ├── Intensional.hs
+        │   ├── Main.hs
+        │   ├── Makefile
+        │   ├── Parser.hs
+        │   ├── Parser_Bonus.hs
+        │   ├── Transform.hs
+        │   └── Types.hs
+        └── test
+            └── .txt
 
 - Σχολιασμός Κώδικα:
 
